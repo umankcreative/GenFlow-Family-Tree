@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* React Flow Base Styles fix */
+.react-flow__attribution {
+  display: none;
+}

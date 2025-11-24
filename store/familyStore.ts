@@ -12,11 +12,13 @@ import dagre from 'dagre';
 import { FamilyNode, FamilyEdge, PersonData, Gender } from '../types';
 import { INITIAL_NODES, NODE_WIDTH, NODE_HEIGHT } from '../constants';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { databaseService } from '../services/databaseService';
 
 interface FamilyState {
   nodes: FamilyNode[];
   edges: FamilyEdge[];
   selectedNodeId: string | null;
+  familyTreeId: string | null;
 
   // Actions
   onNodesChange: (changes: NodeChange[]) => void;
@@ -30,6 +32,9 @@ interface FamilyState {
   selectNode: (id: string | null) => void;
   setGraph: (nodes: FamilyNode[], edges: FamilyEdge[]) => void;
   autoLayout: () => void;
+  setFamilyTreeId: (id: string | null) => void;
+  saveToDB: () => Promise<void>;
+  loadFromDB: (familyTreeId: string) => Promise<void>;
 }
 
 const getLayoutedElements = (nodes: FamilyNode[], edges: FamilyEdge[]) => {
@@ -75,6 +80,7 @@ export const useFamilyStore = create<FamilyState>()(
       nodes: INITIAL_NODES as FamilyNode[],
       edges: [],
       selectedNodeId: null,
+      familyTreeId: null,
 
       onNodesChange: (changes) =>
         set({
@@ -237,6 +243,71 @@ export const useFamilyStore = create<FamilyState>()(
         const { nodes, edges } = get();
         const { nodes: layoutNodes, edges: layoutEdges } = getLayoutedElements(nodes, edges);
         set({ nodes: layoutNodes, edges: layoutEdges });
+      },
+
+      setFamilyTreeId: (id) => set({ familyTreeId: id }),
+
+      saveToDB: async () => {
+        const { nodes, edges, familyTreeId } = get();
+
+        if (!familyTreeId) {
+          console.warn('No family tree ID set');
+          return;
+        }
+
+        try {
+          await databaseService.saveAllPositions(familyTreeId, nodes);
+        } catch (error) {
+          console.error('Failed to save to database:', error);
+          throw error;
+        }
+      },
+
+      loadFromDB: async (familyTreeId: string) => {
+        try {
+          const [people, relationships, positions] = await Promise.all([
+            databaseService.getPeople(familyTreeId),
+            databaseService.getRelationships(familyTreeId),
+            databaseService.getPositions(familyTreeId),
+          ]);
+
+          const nodes: FamilyNode[] = people.map((person: any) => {
+            const position = positions.find((p: any) => p.person_id === person.id);
+            return {
+              id: person.id,
+              type: 'person',
+              position: position ? { x: position.x, y: position.y } : { x: 0, y: 0 },
+              data: {
+                name: person.name,
+                gender: person.gender,
+              },
+            };
+          });
+
+          const edges: FamilyEdge[] = relationships.map((rel: any) => {
+            const isSpouse = rel.relationship_type === 'spouse';
+            return {
+              id: rel.id,
+              source: rel.source_person_id,
+              target: rel.target_person_id,
+              type: isSpouse ? 'straight' : 'smoothstep',
+              animated: false,
+              style: isSpouse ? { stroke: '#db2777', strokeWidth: 2, strokeDasharray: '5,5' } : undefined,
+              data: { isSpouse, label: isSpouse ? 'Married' : undefined },
+              label: isSpouse ? 'Married' : undefined,
+              labelStyle: isSpouse ? { fill: '#db2777', fontWeight: 700, fontSize: 12 } : undefined,
+              labelBgStyle: isSpouse ? { fill: '#fce7f3' } : undefined,
+              sourceHandle: isSpouse ? 'right' : undefined,
+              targetHandle: isSpouse ? 'left' : undefined,
+              markerEnd: isSpouse ? undefined : { type: MarkerType.ArrowClosed },
+            };
+          });
+
+          set({ nodes, edges, familyTreeId });
+        } catch (error) {
+          console.error('Failed to load from database:', error);
+          throw error;
+        }
       },
     }),
     {

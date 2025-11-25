@@ -36,7 +36,8 @@ function FamilyTreeFlow() {
     selectNode(null);
   }, [selectNode]);
 
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: any) => {
+  const onNodeClick = useCallback((event: React.MouseEvent, node: any) => {
+    event.stopPropagation();
     selectNode(node.id);
   }, [selectNode]);
 

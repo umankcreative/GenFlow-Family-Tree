@@ -32,12 +32,14 @@ function FamilyTreeFlow() {
 
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
-  const onPaneClick = useCallback(() => {
+  const onPaneClick = useCallback((event: React.MouseEvent) => {
+    if ((event.target as HTMLElement).closest('.nodrag')) {
+      return;
+    }
     selectNode(null);
   }, [selectNode]);
 
-  const onNodeClick = useCallback((event: React.MouseEvent, node: any) => {
-    event.stopPropagation();
+  const onNodeClick = useCallback((_event: React.MouseEvent, node: any) => {
     selectNode(node.id);
   }, [selectNode]);
 
